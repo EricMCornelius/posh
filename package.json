@@ -1,0 +1,36 @@
+{
+  "author": {
+    "name": "Eric M. Cornelius",
+    "email": "EricMCornelius@gmail.com"
+  },
+  "name": "posh",
+  "description": "A general build dependency system",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:EricMCornelius/posh.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EricMCornelius/posh/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "http://github.com/EricMCornelius/posh/blob/master/LICENSE-MIT"
+    }
+  ],
+  "main": "posh.js",
+  "engines": {
+    "node": "*"
+  },
+  "dependencies": {
+    "async": "0.1.22",
+    "glob": "3.1.10",
+    "jquery": "1.7.3",
+    "wrench": "1.3.9",
+    "xregexp": "2.0.0"
+  },
+  "readme": "",
+  "_id": "posh@0.1.0",
+  "_from": "posh"
+}
