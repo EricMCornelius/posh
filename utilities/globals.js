@@ -7,9 +7,13 @@ __file = __filename;
 // global build root
 __build_root = '/var/tmp/build';
 
+// global build cache
+__cache = '.cache';
+
 // global used to track current file env
 __env = {
   file: __filename,
-  build_root: '/var/tmp/build',
+  build_root: __build_root,
+  cache: __cache,
   toolchain: 'gcc'
 };

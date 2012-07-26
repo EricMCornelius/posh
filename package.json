@@ -2,7 +2,10 @@
   "name": "posh",
   "description": "A general build dependency system",
   "homepage": "https://github.com/EricMCornelius/posh",
-  "keywords": ["C++", "build system"],
+  "keywords": [
+    "C++",
+    "build system"
+  ],
   "author": {
     "name": "Eric M. Cornelius",
     "email": "EricMCornelius@gmail.com",
@@ -35,5 +38,6 @@
     "xregexp": "2.0.0"
   },
   "_id": "posh@0.1.0",
-  "_from": "posh"
+  "_from": "posh",
+  "readme": "posh\n====\n\nDependency graph build system written in nodejs"
 }

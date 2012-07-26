@@ -185,11 +185,11 @@ var hash = function(file, cb) {
   });
 };
 
-// tracks trigger updated flgs
+// tracks trigger updated flags
 var updated = {};
 
 // for a given set of files, determines whether invalidation is necessary
-invalidate = function(cache_file, triggers, cb) {
+exports.invalidate = function(cache_file, root, triggers, cb) {
   load_cache_file(cache_file, function(cache) {
     var triggered = false;
 
@@ -202,7 +202,7 @@ invalidate = function(cache_file, triggers, cb) {
           return cb();
         }
 
-        hash(trigger, function(val) {
+        hash(path.join(root, trigger), function(val) {
           if (trigger in updated) {
             if (updated[trigger] === true)
               triggered = true;

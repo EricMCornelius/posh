@@ -13,12 +13,8 @@ GlobalRegistry = new RegistryType();
 register = function(node) {
   node.__file = path.basename(__file);
   node.__dir = path.dirname(__file);
-  node.root = path.resolve(node.__dir, node.root);
-  node.src_root = node.src_root || '';
-  node.target_root = node.target_root || '';
+  node.root = node.root || node.__dir;
   node.deps = node.deps || [];
-  node.src_root = path.resolve(node.root, node.src_root);
-  node.target_root = path.resolve(node.root, node.target_root);
   GlobalRegistry.register_node(node);
 };
 
