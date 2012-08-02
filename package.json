@@ -11,7 +11,7 @@
     "email": "EricMCornelius@gmail.com",
     "url": "https://github.com/EricMCornelius"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "type": "git",
     "url": "git@github.com:EricMCornelius/posh.git"
@@ -34,9 +34,9 @@
     "async": "0.1.22",
     "glob": "3.1.10",
     "jquery": "1.7.3",
-    "wrench": "1.3.9",
+    "wrench": "1.3.9"
   },
-  "_id": "posh@0.1.0",
+  "_id": "posh@0.1.1",
   "_from": "posh",
   "readme": "posh\n====\n\nDependency graph build system written in nodejs"
 }
