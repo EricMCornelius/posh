@@ -42,13 +42,8 @@ PathInfo.prototype.join = function(args) {
 
 // extends fs with an asynchronous copy function
 fs.copy = function (src, dst, cb) {
-  console.log('Copying ' + src + ' -> ' + dst);
-
   function copy(err) {
     var is, os;
-
-    if (!err)
-      console.log('Overwriting file: ' + dst);
 
     fs.stat(src, function (err) {
       if (err)
@@ -69,18 +64,30 @@ dump = function(obj) {
 }
 
 // serializes object to file
-cache = function(file, obj, cb) {
+exports.cache = function(file, obj, cb) {
   wrench.mkdirSyncRecursive(path.dirname(file));
-  fs.writeFile(file, dump(obj), cb);
+  if (exists(cb))
+    fs.writeFile(file, dump(obj), cb);
+  else
+    fs.writeFileSync(file, dump(obj));
 }
 
 // retrieves object from file
-retrieve = function(file, cb) {
+exports.retrieve = function(file, cb) {
   fs.readFile(file, function(err, data) {
     if (err)
       return cb(err);
     cb(null, JSON.parse(data));
   });
+}
+
+// writes string to file
+write = function(file, str, cb) {
+  wrench.mkdirSyncRecursive(path.dirname(file));
+  if (exists(cb))
+    fs.writeFile(file, str, cb);
+  else
+    fs.writeFileSync(file, str);
 }
 
 replace = function(str, replacements) {
@@ -107,13 +114,12 @@ launch = function(args, cb) {
   var root = args.opts.cwd || __dirname;
 
   var invocation = {
-    cmds: ['cd ' + root, [args.cmd].concat(args.args).join(' ')],
+    cmd: [args.cmd].concat(args.args).join(' '),
+    cwd: root,
     stdout: [],
     stderr: [],
     exit_code: 0
   };
-
-  console.log(invocation.cmds[1]);
 
   var invoke = proc.spawn(args.cmd, args.args, args.opts);
   invoke.stdout.on('data', function(data) {
@@ -129,47 +135,13 @@ launch = function(args, cb) {
   });
 
   invoke.on('close', function() {
+    invocation.stdout = invocation.stdout.join('');
+    invocation.stderr = invocation.stderr.join('');
     if (invocation.exit_code !== 0) {
-      console.log(invocation.stderr + '');
       return cb(new Error(invocation.exit_code), invocation);
     }
     cb(null, invocation);
   });
-};
-
-// loads .cache files containing target metadata
-var cache_files = {};
-load_cache_file = function(cache_path, cb) {
-  var cache = cache_files[cache_path];
-  if (exists(cache))
-    return cb(cache);
-
-  retrieve(cache_path, function(err, obj) {
-    if (err)
-      obj = {};
-
-    var cache = cache_files[cache_path];
-    if (exists(cache))
-      return cb(cache);
-
-    cache_files[cache_path] = obj;
-    return cb(obj);
-  });
-};
-
-save_cache_files = function(cb) {
-  var files = Object.keys(cache_files);
-  async.forEach(
-    files,
-    function(file, cb) {
-      cache(file, cache_files[file], cb);
-    },
-    function(err) {
-      if (err)
-        throw err;
-      cb();
-    }
-  );
 };
 
 // hashes the contents of a file
@@ -181,47 +153,55 @@ var hash = function(file, cb) {
   });
 
   s.on('end', function() {
-    cb(h.digest('hex'));
+    cb(null, h.digest('hex'));
+  });
+
+  s.on('error', function(err) {
+    cb('Failed hashing file: ' + file);
   });
 };
 
-// tracks trigger updated flags
-var updated = {};
-
 // for a given set of files, determines whether invalidation is necessary
-exports.invalidate = function(cache_file, root, triggers, cb) {
-  load_cache_file(cache_file, function(cache) {
-    var triggered = false;
+exports.invalidate = function(args) {
+  var updated = args.updated;
+  var cache = args.cache;
+  var root = args.root;
+  var triggers = args.triggers;
+  var cb = args.cb;
 
-    async.forEach(
-      triggers,
-      function(trigger, cb) {
+  var triggered = false;
+
+  async.forEach(
+    triggers,
+    function(trigger, cb) {
+      if (trigger in updated) {
+        if (updated[trigger] === true)
+          triggered = true;
+        return cb();
+      }
+
+      hash(path.join(root, trigger), function(err, val) {
+        if (err)
+          return cb(err);
+
         if (trigger in updated) {
           if (updated[trigger] === true)
             triggered = true;
           return cb();
         }
 
-        hash(path.join(root, trigger), function(val) {
-          if (trigger in updated) {
-            if (updated[trigger] === true)
-              triggered = true;
-            return cb();
-          }
+        updated[trigger] = (val !== cache[trigger]);
+        cache[trigger] = val;
 
-          updated[trigger] = (val !== cache[trigger]);
-          cache[trigger] = val;
-
-          if (updated[trigger] === true)
-            triggered = true;
-          cb();
-        });
-      },
-      function(err) {
-        cb(triggered);
-      }
-    );
-  });
+        if (updated[trigger] === true)
+          triggered = true;
+        cb();
+      });
+    },
+    function(err) {
+      cb(err, triggered);
+    }
+  );
 };
 
 // args

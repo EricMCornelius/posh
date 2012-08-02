@@ -7,13 +7,35 @@ var path = require('path');
 var utils = require('../utilities/utils.js');
 
 // invalidate file hashes to determine changed files
-var invalidate = function(triggers, cb) {
+// if dependent files have changed or the target file doesn't exist
+// trigger a rebuild... otherwise execute the callback
+var invalidate = function(ctx, triggers, target, exec, cb) {
   var triggers = triggers.map(function(trigger) {
-    if (trigger.indexOf(__build_root) === 0)
-      return trigger.slice(__build_root.length + 1);
+    if (trigger.indexOf(ctx.root) === 0)
+      return trigger.slice(ctx.root.length + 1);
   });
 
-  utils.invalidate(__cache, __build_root, triggers, cb);
+  var invalidate_func = function(err, rebuild) {
+    if (err)
+      return cb(err);
+
+    if (rebuild) {
+      exec();
+    }
+    else {
+      fs.exists(target, function(exists) {
+        exists ? cb() : exec();
+      });
+    }
+  };
+
+  utils.invalidate({
+    cache: ctx.cache,
+    updated: ctx.updated,
+    root: ctx.root,
+    triggers: triggers,
+    cb: invalidate_func
+  });
 }
 
 // the following functions provide actions to execute as the dependency
@@ -26,6 +48,7 @@ var dependencies = {
     var node = args.node;
     var g = args.graph;
     var cb = args.cb;
+    var ctx = args.ctx;
 
     var include_paths = {};
     recursive_visit(g, node, function(node) {
@@ -46,9 +69,10 @@ var dependencies = {
 
     var flags = node.compile_flags || [];
 
+    var full_source = path.resolve(node.root, node.source);
+    var full_target = path.resolve(node.root, node.target);
+
     var dep_func = function() {
-      var full_source = path.resolve(node.root, node.source);
-      var full_target = path.resolve(node.root, node.target);
 
       wrench.mkdirSyncRecursive(path.dirname(full_target));
 
@@ -58,7 +82,8 @@ var dependencies = {
         args: dep_args,
         opts: {cwd: node.root}
       }, function(err, data) {
-        var dep_info = data.stdout + '';
+        node.__cmdinfo = data;
+        var dep_info = data.stdout;
 
         // first element is the .o file target
         // second element is the .cpp source
@@ -67,26 +92,19 @@ var dependencies = {
                             .filter(empty);
         split.shift();
         split = split.map(function(dep) {
-          return dep.replace(__build_root + path.sep, '');
+          return dep.replace(ctx.root + path.sep, '');
         });
 
-        if (err) {
-          console.log(data.stderr + '');
-          throw (err);
-        }
+        if (err)
+          return cb(err);
 
-        cache(full_target, split, cb);
+        utils.cache(full_target, split, cb);
       });
     }
 
     var triggers = [path.resolve(node.root, node.source)];
 
-    invalidate(triggers, function(check) {
-      if (check === true)
-        dep_func();
-      else
-        cb();
-    });
+    invalidate(ctx, triggers, full_target, dep_func, cb);
   }
 };
 
@@ -97,12 +115,16 @@ var compile = {
     var node = args.node;
     var g = args.graph;
     var cb = args.cb;
+    var ctx = args.ctx;
+
+    var full_source = path.resolve(node.root, node.source);
+    var full_target = path.resolve(node.root, node.target);
 
     var include_paths = {};
     recursive_visit(g, node, function(node) {
       if (node.type === 'publish') {
-        var full_target = path.resolve(node.root, node.target);
-        include_paths[path.dirname(full_target)] = true;
+        var include_target = path.resolve(node.root, node.target);
+        include_paths[path.dirname(include_target)] = true;
       }
       else if(node.type === 'external') {
         node.include_path.forEach(function(p) {
@@ -119,31 +141,28 @@ var compile = {
 
     // compile the compilation unit via g++
     var compile_func = function() {
-      var full_source = path.resolve(node.root, node.source);
-      var full_target = path.resolve(node.root, node.target);
-
       wrench.mkdirSyncRecursive(path.dirname(full_target));
-
       var compile_args = ['-c', full_source, '-o', full_target].concat(flags).concat(paths);
 
       launch({
         cmd: 'g++',
         args: compile_args,
         opts: {cwd: node.root}
-      }, cb);
+      }, function(err, data) {
+        node.__cmdinfo = data;
+        cb(err);
+      });
     };
 
     var load_triggers = function(file) {
-      retrieve(file, function(err, triggers) {
+      utils.retrieve(file, function(err, triggers) {
+        if (err)
+          return cb('Failed loading file: ' + file);
+
         triggers = triggers.map(function (trigger) {
-          return path.join(__build_root, trigger);
+          return path.join(ctx.root, trigger);
         });
-        invalidate(triggers, function(check) {
-          if (check === true)
-            compile_func();
-          else
-            cb();
-        });
+        invalidate(ctx, triggers, full_target, compile_func, cb);
       });
     };
 
@@ -158,22 +177,28 @@ var link = {
     var node = args.node;
     var g = args.graph;
     var cb = args.cb;
+    var ctx = args.ctx;
+
+    var full_source = path.resolve(node.root, node.source);
+    var real_target = node.real_target;
+    var full_target = path.resolve(node.root, real_target);
 
     var lib_paths = {};
     var lib_names = {};
     var obj_files = {};
+
     recursive_visit(g, node, function(node) {
-      var full_target = path.resolve(node.root, node.target);
+      var node_target = path.resolve(node.root, node.target);
 
       if (node.type === 'link') {
-        lib_paths[path.dirname(full_target)] = true;
-        lib_names[path.basename(full_target)] = true;
+        lib_paths[path.dirname(node_target)] = true;
+        lib_names[path.basename(node_target)] = true;
       }
       else if(node.type === 'compile') {
         var id_root = args.node.id.split('.')[0];
         var dep_id_root = node.id.split('.')[0];
         if (id_root === dep_id_root)
-          obj_files[full_target] = true;
+          obj_files[node_target] = true;
       }
       else if(node.type === 'external') {
         node.lib_path.forEach(function(p) {
@@ -201,22 +226,12 @@ var link = {
     for (o in obj_files)
       objs.push(o);
 
-    var target_dir = path.dirname(node.target);
-    var target_name = path.basename(node.target);
-
     var flags = node.link_flags || [];
-    if (node.subtype === 'shared') {
+    if (node.subtype === 'shared')
       flags.push('-shared');
-      target_name = 'lib' + target_name + '.so';
-    }
 
     var link_func = function() {
-      var full_source = path.resolve(node.root, node.source);
-      var full_target = path.resolve(node.root, node.target);
-
-      var targetdir = path.dirname(full_target);
-      wrench.mkdirSyncRecursive(targetdir);
-      full_target = path.join(targetdir, target_name);
+      wrench.mkdirSyncRecursive(path.dirname(full_target));
 
       var args = ['-o', full_target].concat(flags).concat(objs).concat(paths).concat(rpaths).concat(libs);
 
@@ -224,16 +239,14 @@ var link = {
         cmd: 'g++',
         args: args,
         opts: {cwd: node.root}
-      }, cb);
+      }, function(err, data) {
+        node.__cmdinfo = data;
+        cb(err);
+      });
     }
 
     var triggers = objs;
-    invalidate(triggers, function(check) {
-      if (check === true)
-        link_func();
-      else
-        cb();
-    });
+    invalidate(ctx, triggers, real_target, link_func, cb);
   }
 };
 
@@ -243,23 +256,27 @@ var publish = {
   exec: function(args) {
     var node = args.node;
     var cb = args.cb;
+    var ctx = args.ctx;
+
+    var full_source = path.resolve(node.root, node.source);
+    var full_target = path.resolve(node.root, node.target);
 
     var publish_func = function() {
-      var full_source = path.resolve(node.root, node.source);
-      var full_target = path.resolve(node.root, node.target);
-
       wrench.mkdirSyncRecursive(path.dirname(full_target));
-      fs.copy(full_source, full_target, cb);
+      launch({
+        cmd: 'cp',
+        args: [full_source, full_target],
+        opts: {cwd: node.root}
+      }, function(err, data) {
+        node.__cmdinfo = data;
+        cb(err);
+      });
+      //fs.copy(full_source, full_target, cb);
     };
 
     var triggers = [path.resolve(node.root, node.source)];
 
-    invalidate(triggers, function(check) {
-      if (check === true)
-        publish_func();
-      else
-        cb();
-    });
+    invalidate(ctx, triggers, full_target, publish_func, cb);
   }
 };
 
@@ -273,16 +290,9 @@ var postbuild = {
   }
 }
 
-// register the processing actions for the toolset in the global registry
-GlobalRegistry.add_process_action(dependencies);
-GlobalRegistry.add_process_action(compile);
-GlobalRegistry.add_process_action(link);
-GlobalRegistry.add_process_action(publish);
-GlobalRegistry.add_process_action(postbuild);
-
 
 // the following functions provide actions to execute as nodes are initially registered
-// in the dependency graph during the traversal of .dep files
+// during the traversal of .dep files
 //
 // these hooks allow for modifying registered nodes, as well as generating any implicit information
 
@@ -290,7 +300,7 @@ GlobalRegistry.add_process_action(postbuild);
 // generate nodes matching the subtype of the template from either a list of sources, or a glob
 //
 // nodes are generated by substiting fields from the list of sources
-//into the target string of the template
+// into the target string of the template
 var template = {
   type: 'template',
   exec: function(node) {
@@ -318,6 +328,7 @@ var template = {
       inst.target = inst.target;
       inst.id = inst.id + '/' + info.file + info.ext;
       inst.type = node.subtype;
+      delete inst.subtype;
       deps.push(inst.id);
       register(inst);
     });
@@ -369,6 +380,12 @@ var link_register = {
   type: 'link',
   exec: function(node) {
     node.link_flags = node.link_flags || __env.link_flags;
+
+    var target_name = node.target;
+    var target_dir = path.dirname(node.target);
+    if (node.subtype === 'shared')
+      target_name = 'lib' + path.basename(node.target) + '.so';
+    node.real_target = path.join(target_dir, target_name);
   }
 };
 
@@ -404,10 +421,10 @@ var project_register = {
       subtype: 'publish',
       source: node.include,
       target: path.join(node.install_dir, node.publish_dir, '${file}${ext}'),
-      deps: deps.publish
+      deps: deps.publish.map(function(dep) { return dep + '.publish'; })
     };
     register(publish_node);
-    node.deps.push(publish_node.id);
+    node.deps = [publish_node.id];
 
     if (node.subtype !== 'header_only') {
       var compile_node = {
@@ -419,7 +436,6 @@ var project_register = {
         deps: deps.compile.map(function(dep) { return dep + '.publish'; }).concat(node.id + '.publish')
       };
       register(compile_node);
-      node.deps.push(compile_node.id);
 
       var link_node = {
         id: node.id + '.link',
@@ -429,7 +445,7 @@ var project_register = {
         deps: deps.link.map(function(dep) { return dep + '.link'; }).concat(node.id + '.compile')
       };
       register(link_node);
-      node.deps.push(link_node.id);
+      node.deps = [link_node.id];
     }
 
     delete node.target;
@@ -440,15 +456,28 @@ var project_register = {
 var prebuild = {
   type: '*',
   exec: function(node) {
-    node.__file = __file;
+    node.__file = path.basename(__file);
+    node.__dir = path.dirname(__file);
+    node.root = node.root || node.__dir;
+    node.deps = node.deps || [];
     if (exists(node.prebuild))
       node.prebuild();
   }
 };
 
-// register the registration actions for the toolset in the global registry
-GlobalRegistry.add_register_action(prebuild);
-GlobalRegistry.add_register_action(template);
-GlobalRegistry.add_register_action(compile_register);
-GlobalRegistry.add_register_action(link_register);
-GlobalRegistry.add_register_action(project_register);
+// attaches the toolchain to a provided node registry
+exports.attach = function(registry) {
+  // register the processing actions for the toolset in the global registry
+  registry.add_process_action(dependencies);
+  registry.add_process_action(compile);
+  registry.add_process_action(link);
+  registry.add_process_action(publish);
+  registry.add_process_action(postbuild);
+
+  // register the registration actions for the toolset in the global registry
+  registry.add_register_action(prebuild);
+  registry.add_register_action(template);
+  registry.add_register_action(compile_register);
+  registry.add_register_action(link_register);
+  registry.add_register_action(project_register);
+}
