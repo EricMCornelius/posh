@@ -1,0 +1,29 @@
+register({
+  id: 'test',
+  build: function(cb) {
+    console.log('hello world');
+    cb();
+  }
+});
+
+register({
+  id: 'test2',
+  deps: ['test'],
+  build: function(cb) {
+    console.log('goodbye world');
+    cb();
+  }
+});
+
+env.compiler = 'gcc';
+
+var gitconfig = {
+  repo: 'https://github.com/EricMCornelius/Peg.git',
+  branch: 'master',
+  target: 'Peg'
+}
+
+register({
+  id: 'Peg',
+  git: gitconfig
+})

@@ -1,0 +1,23 @@
+var async = require('async');
+
+env.compiler = 'gcc';
+env.compiler_flags = ['-std=c++11'];
+
+var ids = ['test3', 'test4', 'test5'];
+function register_nodes() {
+  async.forEach(
+    ids,
+    function(id, cb) {
+      register({
+        id: id,
+        deps: [],
+        build: function(cb) {
+          console.log(this.env.compiler);
+          cb();
+        }
+      });
+    }
+  );
+}
+
+setTimeout(register_nodes, 1000);

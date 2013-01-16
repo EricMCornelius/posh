@@ -1,0 +1,23 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+# Posh generated dotfiles
+.cache
+.dgraph
+.dot
+
+# Executables
+*.tsk
+
+# Node modules
+node_modules
