@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+require('node_extensions');
+
 var fs = require('fs');
 var vm = require('vm');
 var exec = require('child_process').exec;
@@ -7,16 +9,17 @@ var async = require('async');
 var util = require('util');
 var path = require('path');
 
-require('./lib/extensions/extensions');
+var DependencyGraph = require('./lib/dependency_graph').DependencyGraph;
 
 function get_nodes() {
   var module_path = path.resolve(__dirname, 'nodes.gen');
-  delete require.cache[module_path];
+  util.invalidate_module(module_path);
   return require(module_path).nodes;
 }
 
 function register(cb) {
   exec('./lib/register.js', function(err, stdout, stderr) {
+    console.log(stdout);
     if (err) throw stderr;
     nodes = get_nodes();
     cb();
@@ -25,8 +28,12 @@ function register(cb) {
 
 var nodes = [];
 function method(name, cb) {
+  cb = cb || function() { };
   nodes = get_nodes();
-  
+
+  var graph = new DependencyGraph(nodes);
+  console.log(graph);
+
   async.forEachSeries(
     nodes,
     function(item, cb) { if (item[name]) item[name](util.force(cb, 'registered cb')); else cb(); },
@@ -40,10 +47,6 @@ function method(name, cb) {
 var action = process.argv[2];
 
 switch (action) {
-  case 'generate': {
-    register(function() { });
-    break;
-  }
   case 'update': {
     var old_nodes = [];
     async.series([
