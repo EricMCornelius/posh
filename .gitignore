@@ -24,4 +24,5 @@ node_modules
 test/
 
 nodes.gen
+graph.gen
 *sublime*

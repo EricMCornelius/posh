@@ -5,11 +5,17 @@ require('node_extensions');
 var fs = require('fs');
 var vm = require('vm');
 var exec = require('child_process').exec;
+var spawn = require('child_process').spawn;
 var async = require('async');
 var util = require('util');
 var path = require('path');
 
-var DependencyGraph = require('./lib/dependency_graph').DependencyGraph;
+var exists = util.exists;
+
+var dgraph = require('./lib/dependency_graph');
+var DependencyGraph = dgraph.DependencyGraph;
+var execute = dgraph.execute;
+var write_graph = dgraph.write_graph;
 
 function get_nodes() {
   var module_path = path.resolve(__dirname, 'nodes.gen');
@@ -18,52 +24,47 @@ function get_nodes() {
 }
 
 function register(cb) {
-  exec('./lib/register.js', function(err, stdout, stderr) {
-    console.log(stdout);
-    if (err) throw stderr;
-    nodes = get_nodes();
-    cb();
+  cb = cb || function() {};
+  spawn('./lib/register.js', null, {stdio: 'inherit'});
+}
+
+function generate(cb) {
+  cb = cb || function() {};
+
+  // construct dependency graph of nodes which have the specified action name
+  var nodes = get_nodes().filter(function(node) { return exists(node.generate); });
+  var graph = new DependencyGraph(nodes);
+  graph.generated = [];
+
+  execute(graph, {action: 'generate', begin: function(node) { console.log('Started: ', node.id); }}, function(cb) {
+    var cmd_graph = new DependencyGraph(graph.generated, true);
+    write_graph(cmd_graph);
   });
 }
 
-var nodes = [];
-function method(name, cb) {
+function action(name, cb) {
   cb = cb || function() { };
-  nodes = get_nodes();
 
+  // construct dependency graph of nodes which have the specified action name
+  nodes = get_nodes().filter(function(node) { return exists(node[name]); });
   var graph = new DependencyGraph(nodes);
-  console.log(graph);
 
-  async.forEachSeries(
-    nodes,
-    function(item, cb) { if (item[name]) item[name](util.force(cb, 'registered cb')); else cb(); },
-    function(err) {
-      if (err) throw err;
-      cb();
-    }
-  );
+  execute(graph, {action: name});
+  write_graph(graph);
 }
 
-var action = process.argv[2];
+var name = process.argv[2];
 
-switch (action) {
-  case 'update': {
-    var old_nodes = [];
-    async.series([
-      register,
-      async.apply(async.whilst,
-        function() {
-          var result = nodes.length !== old_nodes.length; 
-          old_nodes = nodes;
-          return result;
-        },
-        async.apply(async.series, [async.apply(method, 'update'), register]),
-        function(err) { }
-      )]
-    );
+switch (name) {
+  case 'scan': {
+    register();
+    break;
+  }
+  case 'generate': {
+    generate();
     break;
   }
   default: {
-    method(action);
+    action(name);
   }
 }
