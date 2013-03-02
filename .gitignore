@@ -11,10 +11,8 @@
 *.la
 *.a
 
-# Posh generated dotfiles
-.cache
-.dgraph
-.dot
+# Posh generated files
+.posh
 
 # Executables
 *.tsk

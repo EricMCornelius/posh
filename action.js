@@ -18,7 +18,7 @@ var execute = dgraph.execute;
 var write_graph = dgraph.write_graph;
 
 function get_nodes() {
-  var module_path = path.resolve(__dirname, 'nodes.gen');
+  var module_path = path.resolve(__dirname, '.posh/nodes.gen');
   util.invalidate_module(module_path);
   return require(module_path).nodes;
 }
@@ -38,7 +38,7 @@ function generate(cb) {
 
   execute(graph, {action: 'generate', begin: function(node) { console.log('Started: ', node.id); }}, function(cb) {
     var cmd_graph = new DependencyGraph(graph.generated, true);
-    write_graph(cmd_graph);
+    write_graph(cmd_graph, '.posh/graph.gen');
   });
 }
 
@@ -50,7 +50,7 @@ function action(name, cb) {
   var graph = new DependencyGraph(nodes);
 
   execute(graph, {action: name});
-  write_graph(graph);
+  write_graph(graph, '.posh/graph.gen');
 }
 
 var name = process.argv[2];
