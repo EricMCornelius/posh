@@ -34,7 +34,7 @@
     "async": "0.2.4",
     "glob": "3.1.10",
     "clone": "0.1.5",
-    "colors": "0.6.0-1",
+    "colors": "git://github.com/danielbeardsley/colors.js.git",
     "node_extensions": "git://github.com/EricMCornelius/node_extensions.git",
     "tar": "0.1.16",
     "adm-zip": "0.1.9",
