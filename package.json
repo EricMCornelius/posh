@@ -36,8 +36,6 @@
     "clone": "0.1.5",
     "colors": "git://github.com/danielbeardsley/colors.js.git",
     "node_extensions": "git://github.com/EricMCornelius/node_extensions.git",
-    "tar": "0.1.16",
-    "adm-zip": "0.1.9",
     "mkdirp": "0.3.4",
     "uuid": "1.4.0"
   },
