@@ -35,8 +35,8 @@
     "glob": "3.1.21",
     "shelljs": "0.1.2",
     "clone": "0.1.5",
-    "colors": "git://github.com/danielbeardsley/colors.js.git",
-    "node_extensions": "git://github.com/EricMCornelius/node_extensions.git",
+    "colors": "danielbeardsley/colors.js",
+    "node_extensions": "EricMCornelius/node_extensions",
     "mkdirp": "0.3.4",
     "uuid": "1.4.0"
   },
