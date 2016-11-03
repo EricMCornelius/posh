@@ -1,3 +1,5 @@
+.ease_cache
+
 # Compiled Object files
 *.slo
 *.lo
